@@ -28,4 +28,4 @@ jobs:
 
       - name: Run server on EC2 with virtual environment
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} "screen -dmS llmserver python /home/ubuntu/server.py"
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} "chmod +x /home/ubuntu/server.py && screen -dmS llmserver python /home/ubuntu/server.py"
