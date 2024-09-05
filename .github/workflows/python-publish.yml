@@ -24,8 +24,8 @@ jobs:
 
       - name: Stop existing Flask server
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} "screen -S llmserver -X quit || pkill -f server.py || true" || true
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} "sudo screen -S llmserver -X quit || pkill -f server.py || true" || true
 
       - name: Run server on EC2 with virtual environment
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} "chmod +x /home/ubuntu/server.py && screen -dmS llmserver python /home/ubuntu/server.py"
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} "sudo chmod +x /home/ubuntu/server.py && sudo screen -dmS llmserver python /home/ubuntu/server.py"
