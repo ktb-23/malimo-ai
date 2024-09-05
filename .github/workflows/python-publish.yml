@@ -22,10 +22,6 @@ jobs:
         run: |
           scp -o StrictHostKeyChecking=no -r ./server.py ubuntu@${{ secrets.EC2_IP_ADDRESS }}:/home/ubuntu/
 
-      - name: Stop existing Flask server
-        run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} "pkill -f server.py || true"
-
       - name: Run server on EC2 with virtual environment
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} "sudo chmod +x /home/ubuntu/server.py && python /home/ubuntu/server.py"
