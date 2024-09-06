@@ -34,6 +34,7 @@ jobs:
             if [ ! -d ".git" ]; then
               git clone https://github.com/ktb-23/malimo-ai.git .  # Git 저장소 클론
             else
+              cd malimo-ai  # 프로젝트 폴더로 이동
               git pull origin dev  # Git 저장소 업데이트
             fi &&
             pip install -r requirements.txt &&
