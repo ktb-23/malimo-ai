@@ -140,7 +140,21 @@ def analyze_message(thread_id, user_input, assistant_id):
         required_keys = ["emotion_analysis", "total_score", "summary", "advice"]
         if all(key in parsed_response for key in required_keys):
             logger.debug(f"Parsed response: {parsed_response}")
-            return parsed_response
+
+            # emotion_analysis를 문자열로 변환
+            emotion_analysis = parsed_response["emotion_analysis"]
+            emotion_analysis_str = ", ".join([f"{item['emotion']}: {item['percentage']}%" for item in emotion_analysis])
+
+            # 최종 결과
+            parsed_result = {
+                "emotion_analysis": emotion_analysis_str,
+                "total_score": parsed_response["total_score"],
+                "summary": parsed_response["summary"],
+                "advice": parsed_response["advice"]
+            }
+
+            logger.debug(f"Final parsed result: {parsed_result}")
+            return parsed_result
         else:
             logger.error(f"응답에 필수 항목 누락: {parsed_response}")
             return {"error": "응답에 필수 항목이 누락되었습니다."}
