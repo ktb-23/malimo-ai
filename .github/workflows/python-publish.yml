@@ -19,13 +19,16 @@ jobs:
 
       - name: Deploy to EC2
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}  # GitHub Secrets에 저장된 SSH 개인 키
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}  # GitHub Secrets에 저장된 SSH 개인 키
         run: |
           echo "$EC2_SSH_KEY" > ~/ec2_key.pem
           chmod 600 ~/ec2_key.pem
 
-          ssh -o StrictHostKeyChecking=no -i ~/ec2_key.pem ubuntu@3.35.159.74 << 'EOF'
-            cd /home/ubuntu/malimo || git clone -b dev https://github.com/ktb-23/malimo-ai.git malimo && cd malimo
+          ssh -o StrictHostKeyChecking=no -i ~/ec2_key.pem ubuntu@3.35.159.74 << EOF
+            if [ ! -d "/home/ubuntu/malimo" ]; then
+              git clone -b dev https://github.com/ktb-23/malimo-ai.git /home/ubuntu/malimo
+            fi
+            cd /home/ubuntu/malimo
 
             # 가상 환경 설정 및 패키지 설치
             python3 -m venv venv
@@ -40,3 +43,4 @@ jobs:
             pkill gunicorn || echo "No existing gunicorn process running"
             nohup venv/bin/gunicorn -w 4 server:app -b 0.0.0.0:5001 > /dev/null 2>&1 &
           EOF
+
