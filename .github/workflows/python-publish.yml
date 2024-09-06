@@ -27,8 +27,8 @@ jobs:
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} \
           "ps aux | grep server.py | grep -v grep | awk '{print \$2}' | xargs -r kill -9 || true"
 
-      - name: Run server on EC2 with virtual environment
+      - name: Run server on EC2 with gunicorn
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} "
             sudo chmod +x /home/ubuntu/server.py &&
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} nohup python /home/ubuntu/server.py > /dev/null 2>&1 & disown"
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} nohup gunicorn -w 4 server:app -b 0.0.0.0:5001 > /dev/null 2> /dev/null < /dev/null & disown"
