@@ -153,4 +153,3 @@ def review():
         error_message = f"An error occurred: {str(e)}"
         app.logger.error(f"Error in review endpoint: {error_message}\n{traceback.format_exc()}")
         return jsonify({"error": error_message}), 500
-
