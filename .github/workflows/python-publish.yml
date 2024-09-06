@@ -19,7 +19,8 @@ jobs:
 
       - name: Deploy to EC2
         env:
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}  # GitHub Secrets에 저장된 SSH 개인 키
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}  
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           echo "$EC2_SSH_KEY" > ~/ec2_key.pem
           chmod 600 ~/ec2_key.pem
@@ -29,6 +30,10 @@ jobs:
               git clone -b dev https://github.com/ktb-23/malimo-ai.git /home/ubuntu/malimo
             fi
             cd /home/ubuntu/malimo
+
+            # 환경 변수 설정
+            echo 'export OPENAI_API_KEY="${OPENAI_API_KEY}"' >> ~/.bashrc
+            source ~/.bashrc
 
             # 가상 환경 설정 및 패키지 설치
             python3 -m venv venv
