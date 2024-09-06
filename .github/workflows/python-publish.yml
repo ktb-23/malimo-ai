@@ -34,7 +34,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i private_key ${USER}@${HOST} '
             cd /home/ubuntu &&
             if [ ! -d "malimo" ]; then
-              git clone https://github.com/ktb-23/malimo-ai.git malimo  # Git 저장소를 /home/ubuntu/malimo에 클론
+              git clone -b dev https://github.com/ktb-23/malimo-ai.git malimo  # Git 저장소를 /home/ubuntu/malimo에 클론
             fi &&
             cd malimo &&  # malimo 폴더로 이동
             git pull origin dev &&  # Git 저장소 업데이트
