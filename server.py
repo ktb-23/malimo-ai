@@ -6,6 +6,18 @@ from logging.handlers import RotatingFileHandler
 import json
 import traceback
 import re
+from dotenv import load_dotenv
+
+
+# .env 파일 로드
+load_dotenv()
+
+# 환경 변수에서 OpenAI API 키 가져오기
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise ValueError("OpenAI API key not found in environment variables")
+
+client = OpenAI(api_key=api_key)
 
 # 환경 변수에서 OpenAI API 키 가져오기
 api_key = os.getenv("OPENAI_API_KEY")
