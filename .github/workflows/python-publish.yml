@@ -20,12 +20,11 @@ jobs:
       - name: Install dependencies
         run: |
           cd malimo 
-          python3 -m venv venv  # 가상환경 생성
-          source venv/bin/activate  # 가상환경 활성화
-          python -m pip install --upgrade pip  # pip 업그레이드
-          pip install -r requirements.txt  # requirements.txt에 명시된 패키지 설치
-          git pull origin dev # Git 저장소 업데이트
-          # 가상환경 활성화
+          python3 -m venv venv
+          source venv/bin/activate 
+          python -m pip install --upgrade pip 
+          pip install -r requirements.txt  
+          git pull origin dev 
           pkill gunicorn || echo "No existing gunicorn process running" 
           nohup venv/bin/gunicorn -w 4 server:app -b 0.0.0.0:5001 > /dev/null 2>&1 
 
