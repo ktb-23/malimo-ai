@@ -63,7 +63,9 @@ def create_assistant(user_id):
    - 사용자의 감정 상태에 맞는 따뜻한 위로나 조언을 제공해.
    - 100-200단어 정도로 작성해.
 
-반드시 위의 순서와 형식을 지켜서 답변해줘. 각 섹션 시작 시 번호와 제목을 명확히 표시해.""",
+반드시 위의 순서와 형식을 지켜서 답변해줘. 
+각 섹션 시작 시 번호와 제목을 명확히 표시해
+위의 내용을 바탕으로 parsing을 진행할건데 이때 텍스트에 강조표현이 들어가면 안된다.""",
             model="gpt-4o-mini"
         )
         app.logger.debug(f"Assistant created successfully for user {user_id}")
