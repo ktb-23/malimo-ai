@@ -49,7 +49,7 @@ def create_assistant(user_id):
 
 3. 조언:
    - 사용자의 감정 상태에 맞는 따뜻한 위로나 조언을 제공해.
-   - 100-300단어 정도로 작성해.
+   - 100-200단어 정도로 작성해.
 
 반드시 위의 순서와 형식을 지켜서 답변해줘. 각 섹션 시작 시 번호와 제목을 명확히 표시해.""",
             model="gpt-4o-mini"
@@ -102,13 +102,8 @@ def parse_response(response):
             "advice": "파싱 오류"
         }
 
-def handle_user_message(user_id, user_input):
+def analyze_message(assistant_id, user_input):
     try:
-        app.logger.debug(f"Handling message for user {user_id}")
-        if user_id not in user_assistants:
-            user_assistants[user_id] = create_assistant(user_id)
-        assistant_id = user_assistants[user_id]
-        
         thread = client.beta.threads.create()
         client.beta.threads.messages.create(
             thread_id=thread.id,
@@ -130,26 +125,45 @@ def handle_user_message(user_id, user_input):
         
         app.logger.debug(f"Raw API response: {answer}")
         
-        parsed_response = parse_response(answer)
-        
-        app.logger.info(f"GPT response for user {user_id}: {parsed_response}")
-        return parsed_response
+        return parse_response(answer)
     except Exception as e:
-        app.logger.error(f"Error processing message for user {user_id}: {str(e)}\n{traceback.format_exc()}")
+        app.logger.error(f"Error analyzing message: {str(e)}\n{traceback.format_exc()}")
         raise
 
-@app.route('/review', methods=['POST'])
-def review():
-    data = request.get_json()
-    user_input = data.get('text')
-    user_id = data.get('user_id', 'default')
-    if not user_input:
-        return jsonify({"error": "No text provided"}), 400
+@app.route('/get_or_create_assistant', methods=['POST'])
+def get_or_create_assistant():
     try:
-        app.logger.debug(f"Received review request for user {user_id}")
-        bot_response = handle_user_message(user_id, user_input)
-        return Response(json.dumps(bot_response, ensure_ascii=False), content_type='application/json; charset=utf-8')
+        data = request.get_json()
+        if not data or 'user_id' not in data:
+            return jsonify({"error": "No user_id provided"}), 400
+        
+        user_id = data['user_id']
+        
+        if user_id not in user_assistants:
+            assistant_id = create_assistant(user_id)
+            user_assistants[user_id] = assistant_id
+        else:
+            assistant_id = user_assistants[user_id]
+        
+        return jsonify({"assistant_id": assistant_id}), 200
     except Exception as e:
         error_message = f"An error occurred: {str(e)}"
-        app.logger.error(f"Error in review endpoint: {error_message}\n{traceback.format_exc()}")
+        app.logger.error(f"Error in get_or_create_assistant: {error_message}\n{traceback.format_exc()}")
+        return jsonify({"error": error_message}), 500
+
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    try:
+        data = request.get_json()
+        if not data or 'assistant_id' not in data or 'message' not in data:
+            return jsonify({"error": "Invalid request data"}), 400
+        
+        assistant_id = data['assistant_id']
+        user_input = data['message']
+        
+        analysis_result = analyze_message(assistant_id, user_input)
+        return Response(json.dumps(analysis_result, ensure_ascii=False), content_type='application/json; charset=utf-8')
+    except Exception as e:
+        error_message = f"An error occurred: {str(e)}"
+        app.logger.error(f"Error in analyze: {error_message}\n{traceback.format_exc()}")
         return jsonify({"error": error_message}), 500
