@@ -23,7 +23,6 @@ jobs:
           source venv/bin/activate  # 가상환경 활성화
           python -m pip install --upgrade pip  # pip 업그레이드
           pip install -r requirements.txt  # requirements.txt에 명시된 패키지 설치
-          cd /home/ubuntu 
           if [ ! -d "malimo" ]; then
           git clone -b dev https://github.com/ktb-23/malimo-ai.git malimo  # Git 저장소를 /home/ubuntu/malimo에 클론
           fi 
