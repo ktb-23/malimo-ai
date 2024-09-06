@@ -44,11 +44,7 @@ def get_or_create_assistant():
     {"emotion": "기대", "percentage": 10}
   ],
   "total_score": 3.5,
-  "summary": [
-    "오늘 일하다가 너무 힘들어 퇴근하기로 결정했어요.",
-    "저녁에 친구와 맛있는 저녁을 먹었어요.",
-    "집에 돌아와서 영화를 보며 휴식을 취했어요."
-  ],
+  "summary": "오늘 일하다가 너무 힘들어 퇴근하기로 결정했어요. 저녁에 친구와 맛있는 저녁을 먹었어요. 집에 돌아와서 영화를 보며 휴식을 취했어요.",
   "advice": "오늘 하루 정말 고생 많으셨습니다. 힘들었던 일이 많았지만, 내일은 더 나은 하루가 될 거예요. 충분한 휴식을 취하고 긍정적인 마음을 유지하려고 노력해보세요. 새로운 도전은 때때로 불안함을 가져오기도 하지만, 그 과정에서 배울 점이 많습니다. 자신을 믿고 조금 더 여유를 가지면 좋을 것 같아요."
 }
 
@@ -113,27 +109,48 @@ def analyze_message(thread_id, user_input, assistant_id):
         # 메시지 리스트를 받아서 GPT의 응답을 추출
         messages = client.beta.threads.messages.list(thread_id=thread_id)
         
-        # messages 구조를 로그로 출력 (디버깅용)
+        # 디버깅용으로 전체 메시지 출력
         logger.debug(f"Messages received: {messages}")
 
-        # 최신 메시지의 내용을 확인
-        answer = messages.data[-1].content[0].text.value  # 최신 메시지를 사용
-        
-        # answer 구조를 로그로 출력 (디버깅용)
-        logger.debug(f"Answer extracted: {answer}")
+        # role이 'assistant'인 메시지를 필터링하여 찾기
+        assistant_message = None
+        for message in messages.data:
+            if message.role == 'assistant':
+                assistant_message = message.content[0].text.value
+                break
+
+        if assistant_message is None:
+            logger.error("No assistant message found in the thread.")
+            return {"error": "No assistant message found."}
+
+        logger.debug(f"Assistant message extracted: {assistant_message}")
         
         # 응답이 JSON 형식이므로 이를 파싱
         try:
-            parsed_response = json.loads(answer)
+            parsed_response = json.loads(assistant_message)
         except json.JSONDecodeError:
-            logger.error(f"API 응답이 JSON 형식이 아님: {answer}")
+            logger.error(f"API 응답이 JSON 형식이 아님: {assistant_message}")
             return {"error": "API 응답이 JSON 형식이 아닙니다."}
         
         # 각 항목이 제대로 존재하는지 확인
         required_keys = ["emotion_analysis", "total_score", "summary", "advice"]
         if all(key in parsed_response for key in required_keys):
             logger.debug(f"Parsed response: {parsed_response}")
-            return parsed_response
+
+            # emotion_analysis를 문자열로 변환
+            emotion_analysis = parsed_response["emotion_analysis"]
+            emotion_analysis_str = ", ".join([f"{item['emotion']}: {item['percentage']}%" for item in emotion_analysis])
+
+            # 최종 결과
+            parsed_result = {
+                "emotion_analysis": emotion_analysis_str,
+                "total_score": parsed_response["total_score"],
+                "summary": parsed_response["summary"],
+                "advice": parsed_response["advice"]
+            }
+
+            logger.debug(f"Final parsed result: {parsed_result}")
+            return parsed_result
         else:
             logger.error(f"응답에 필수 항목 누락: {parsed_response}")
             return {"error": "응답에 필수 항목이 누락되었습니다."}
