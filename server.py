@@ -155,6 +155,3 @@ def parse_response(response):
             "summary": "파싱 오류",
             "advice": "파싱 오류"
         }
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001, debug=True)
