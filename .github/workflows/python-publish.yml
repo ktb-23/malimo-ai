@@ -26,9 +26,9 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} \
           "ps aux | grep server.py | grep -v grep | awk '{print \$2}' | xargs -r kill -9 || true"
-          
+
       - name: Run server on EC2 with virtual environment
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} "
             sudo chmod +x /home/ubuntu/server.py &&
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} nohup python /home/ubuntu/server.py &"  # 서버를 백그라운드에서 실행
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} nohup python /home/ubuntu/server.py > /dev/null 2>&1 & disown"
