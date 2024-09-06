@@ -36,7 +36,6 @@ jobs:
             if [ ! -d "malimo" ]; then
               git clone -b dev https://github.com/ktb-23/malimo-ai.git malimo  # Git 저장소를 /home/ubuntu/malimo에 클론
             fi &&
-            cd malimo &&  # malimo 폴더로 이동
             git pull origin dev &&  # Git 저장소 업데이트
             # 가상환경 생성 및 활성화
             source venv/bin/activate &&
