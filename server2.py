@@ -113,20 +113,27 @@ def analyze_message(thread_id, user_input, assistant_id):
         # 메시지 리스트를 받아서 GPT의 응답을 추출
         messages = client.beta.threads.messages.list(thread_id=thread_id)
         
-        # messages 구조를 로그로 출력 (디버깅용)
+        # 디버깅용으로 전체 메시지 출력
         logger.debug(f"Messages received: {messages}")
 
-        # 최신 메시지의 내용을 확인
-        answer = messages.data[-1].content[0].text.value  # 최신 메시지를 사용
-        
-        # answer 구조를 로그로 출력 (디버깅용)
-        logger.debug(f"Answer extracted: {answer}")
+        # role이 'assistant'인 메시지를 필터링하여 찾기
+        assistant_message = None
+        for message in messages.data:
+            if message.role == 'assistant':
+                assistant_message = message.content[0].text.value
+                break
+
+        if assistant_message is None:
+            logger.error("No assistant message found in the thread.")
+            return {"error": "No assistant message found."}
+
+        logger.debug(f"Assistant message extracted: {assistant_message}")
         
         # 응답이 JSON 형식이므로 이를 파싱
         try:
-            parsed_response = json.loads(answer)
+            parsed_response = json.loads(assistant_message)
         except json.JSONDecodeError:
-            logger.error(f"API 응답이 JSON 형식이 아님: {answer}")
+            logger.error(f"API 응답이 JSON 형식이 아님: {assistant_message}")
             return {"error": "API 응답이 JSON 형식이 아닙니다."}
         
         # 각 항목이 제대로 존재하는지 확인
