@@ -17,14 +17,26 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install dependencies
+      - name: Deploy to EC2
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}  # GitHub Secrets에 저장된 SSH 개인 키
         run: |
-          cd home/ubuntu/malimo 
-          python3 -m venv venv
-          source venv/bin/activate 
-          python -m pip install --upgrade pip 
-          pip install -r requirements.txt  
-          git pull origin dev 
-          pkill gunicorn || echo "No existing gunicorn process running" 
-          nohup venv/bin/gunicorn -w 4 server:app -b 0.0.0.0:5001 > /dev/null 2>&1 
+          echo "$SSH_PRIVATE_KEY" > ~/ec2_key.pem
+          chmod 600 ~/ec2_key.pem
 
+          ssh -o StrictHostKeyChecking=no -i ~/ec2_key.pem ubuntu@<EC2_IP_ADDRESS> << 'EOF'
+            cd /home/ubuntu/malimo || git clone -b dev https://github.com/ktb-23/malimo-ai.git malimo && cd malimo
+
+            # 가상 환경 설정 및 패키지 설치
+            python3 -m venv venv
+            source venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
+
+            # 최신 코드로 업데이트
+            git pull origin dev
+
+            # gunicorn 종료 후 재시작
+            pkill gunicorn || echo "No existing gunicorn process running"
+            nohup venv/bin/gunicorn -w 4 server:app -b 0.0.0.0:5001 > /dev/null 2>&1 &
+          EOF
