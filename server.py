@@ -1,12 +1,11 @@
 import os
+import sys
 from flask import Flask, request, jsonify, Response
 from openai import OpenAI
-import logging
-from logging.handlers import RotatingFileHandler
 import json
 import traceback
 import re
-from threading import Lock
+import logging
 
 # 환경 변수에서 OpenAI API 키 가져오기
 api_key = os.getenv("OPENAI_API_KEY")
@@ -18,13 +17,20 @@ client = OpenAI(api_key=api_key)
 # Flask 앱 초기화
 app = Flask(__name__)
 
-# 사용자별 assistant와 thread 관리를 위한 딕셔너리
-user_data = {}
-lock = Lock()  # 스레드 안전성을 위한 락
+# 콘솔 로깅 설정
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', stream=sys.stdout)
+logger = logging.getLogger(__name__)
 
-def create_assistant(user_id):
+@app.route('/get_or_create_assistant', methods=['POST'])
+def get_or_create_assistant():
     try:
-        app.logger.debug(f"Creating assistant for user {user_id}")
+        data = request.get_json()
+        if not data or 'user_id' not in data:
+            return jsonify({"error": "No user_id provided"}), 400
+        
+        user_id = data['user_id']
+        
+        logger.debug(f"Creating assistant for user {user_id}")
         assistant = client.beta.assistants.create(
             name=f"Diary Assistant for {user_id}",
             instructions="""너는 사용자의 일기를 분석하는 역할이야. 다음 세 가지 정보를 제공해야 해:
@@ -50,68 +56,71 @@ def create_assistant(user_id):
             model="gpt-4o-mini"
         )
         thread = client.beta.threads.create()
-        app.logger.debug(f"Assistant and thread created successfully for user {user_id}")
-        return assistant.id, thread.id
-    except Exception as e:
-        app.logger.error(f"Error creating assistant for user {user_id}: {str(e)}")
-        raise
-
-@app.route('/get_or_create_assistant', methods=['POST'])
-def get_or_create_assistant():
-    try:
-        data = request.get_json()
-        if not data or 'user_id' not in data:
-            return jsonify({"error": "No user_id provided"}), 400
-        
-        user_id = data['user_id']
-        
-        with lock:
-            if user_id not in user_data:
-                assistant_id, thread_id = create_assistant(user_id)
-                user_data[user_id] = {"assistant_id": assistant_id, "thread_id": thread_id}
-            else:
-                assistant_id = user_data[user_id]["assistant_id"]
-                thread_id = user_data[user_id]["thread_id"]
-        
-        app.logger.info(f"Assistant ID for user {user_id}: {assistant_id}, Thread ID: {thread_id}")
-        return jsonify({"assistant_id": assistant_id, "thread_id": thread_id}), 200
+        logger.info(f"Assistant created for user {user_id}: assistant_id={assistant.id}, thread_id={thread.id}")
+        return jsonify({"assistant_id": assistant.id, "thread_id": thread.id}), 200
     except Exception as e:
         error_message = f"An error occurred: {str(e)}"
-        app.logger.error(f"Error in get_or_create_assistant: {error_message}\n{traceback.format_exc()}")
+        logger.error(f"Error in create_assistant: {error_message}\n{traceback.format_exc()}")
         return jsonify({"error": error_message}), 500
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
     try:
-        # 요청에서 데이터를 받아옴
         data = request.get_json()
-        if not data or 'thread_id' not in data or 'message' not in data :
+        if not data or 'thread_id' not in data or 'message' not in data or 'assistant_id' not in data:
             return jsonify({"error": "Invalid request data"}), 400
         
-        # 데이터에서 필요한 값 추출
         thread_id = data['thread_id']
         user_input = data['message']
+        assistant_id = data['assistant_id']
         
-        # 로그에 분석 요청 정보 기록
-        app.logger.info(f"Analyzing message for thread ID: {thread_id}")
+        logger.info(f"Analyzing message for thread ID: {thread_id}, assistant ID: {assistant_id}")
         
-        # 메시지 분석을 진행하는 함수 호출
-        analysis_result = analyze_message(thread_id, user_input)
-        
-        # 결과를 JSON 형식으로 반환
+        analysis_result = analyze_message(thread_id, user_input, assistant_id)
         return Response(json.dumps(analysis_result, ensure_ascii=False), content_type='application/json; charset=utf-8')
     
     except Exception as e:
-        # 에러 발생 시 로그에 기록하고 에러 메시지 반환
         error_message = f"An error occurred: {str(e)}"
-        app.logger.error(f"Error in analyze: {error_message}\n{traceback.format_exc()}")
+        logger.error(f"Error in analyze: {error_message}\n{traceback.format_exc()}")
         return jsonify({"error": error_message}), 500
+
+def analyze_message(thread_id, user_input, assistant_id):
+    try:
+        client.beta.threads.messages.create(
+            thread_id=thread_id,
+            role="user",
+            content=user_input
+        )
+        
+        run = client.beta.threads.runs.create(
+            thread_id=thread_id,
+            assistant_id=assistant_id
+        )
+        
+        while run.status != 'completed':
+            run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
+            logger.debug(f"Run status: {run.status}")
+        
+        messages = client.beta.threads.messages.list(thread_id=thread_id)
+        answer = messages.data[0].content[0].text.value
+        
+        logger.debug(f"Raw API response: {answer}")
+        
+        parsed_response = parse_response(answer)
+        
+        if all(value == "파싱 오류" for value in parsed_response.values()):
+            logger.error(f"Parsing failed for all fields. Raw response: {answer}")
+            return {"error": "응답 파싱 중 오류가 발생했습니다."}
+        
+        return parsed_response
+    except Exception as e:
+        logger.error(f"Error analyzing message: {str(e)}\n{traceback.format_exc()}")
+        raise
 
 def parse_response(response):
     try:
-        app.logger.debug(f"Parsing response: {response}")
+        logger.debug(f"Parsing response: {response}")
 
-        # 정규 표현식을 더 유연하게 수정
         emotion_pattern = r"1\.?\s*감정\s*분석:?([\s\S]*?)(?=2\.|\n\n|$)"
         summary_pattern = r"2\.?\s*요약:?([\s\S]*?)(?=3\.|\n\n|$)"
         advice_pattern = r"3\.?\s*조언:?([\s\S]*)"
@@ -124,12 +133,10 @@ def parse_response(response):
         summary = summary_match.group(1).strip() if summary_match else "요약을 찾을 수 없습니다."
         advice = advice_match.group(1).strip() if advice_match else "조언을 찾을 수 없습니다."
 
-        # 총점 추출
         total_score_pattern = r"총점:\s*(\d+\.?\d*)/5"
         total_score_match = re.search(total_score_pattern, emotion_analysis)
         total_score = total_score_match.group(1) if total_score_match else "총점을 찾을 수 없습니다."
 
-        # 요약에서 줄바꿈 처리
         summary = ' '.join(summary.split())
 
         parsed = {
@@ -138,45 +145,16 @@ def parse_response(response):
             "summary": summary,
             "advice": advice
         }
-        app.logger.debug(f"Parsed response: {parsed}")
+        logger.debug(f"Parsed response: {parsed}")
         return parsed
     except Exception as e:
-        app.logger.error(f"Error parsing response: {str(e)}\nResponse: {response}")
+        logger.error(f"Error parsing response: {str(e)}\nResponse: {response}")
         return {
             "emotion_analysis": "파싱 오류",
             "total_score": "파싱 오류",
             "summary": "파싱 오류",
             "advice": "파싱 오류"
         }
-        
-def analyze_message(thread_id, user_input):
-    try:
-        client.beta.threads.messages.create(
-            thread_id=thread_id,
-            role="user",
-            content=user_input
-        )
-        
-        run = client.beta.threads.runs.create(
-            thread_id=thread_id
-        )
-        
-        while run.status != 'completed':
-            run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
-            app.logger.debug(f"Run status: {run.status}")
-        
-        messages = client.beta.threads.messages.list(thread_id=thread_id)
-        answer = messages.data[0].content[0].text.value
-        
-        app.logger.debug(f"Raw API response: {answer}")
-        
-        parsed_response = parse_response(answer)
-        
-        if all(value == "파싱 오류" for value in parsed_response.values()):
-            app.logger.error(f"Parsing failed for all fields. Raw response: {answer}")
-            return {"error": "응답 파싱 중 오류가 발생했습니다."}
-        
-        return parsed_response
-    except Exception as e:
-        app.logger.error(f"Error analyzing message: {str(e)}\n{traceback.format_exc()}")
-        raise
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5001, debug=True)
