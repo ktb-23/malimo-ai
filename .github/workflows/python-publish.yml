@@ -26,12 +26,15 @@ jobs:
         env:
           PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
           HOST: ${{ secrets.EC2_IP_ADDRESS }}
-          USER: ubuntu  # EC2_USER를 ubuntu로 기본 설정
+          USER: ubuntu
         run: |
           echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
           ssh -o StrictHostKeyChecking=no -i private_key ${USER}@${HOST} '
-            cd /path/to/your/app &&
-            git pull origin main &&
-            source venv/bin/activate &&
-            pip install -r requirements.txt &&
-            sudo systemctl restart your-flask-app.service'
+            cd /home/ubuntu &&  # 홈 디렉터리에서 작업
+            if [ ! -d ".git" ]; then
+              git clone https://github.com/your-repo/your-project.git .;  # GitHub 저장소를 클론, "."는 현재 디렉터리를 의미
+            else
+              git pull origin main;  # 이미 클론된 경우 업데이트
+            fi &&
+            pip install -r requirements.txt &&  # 의존성 설치
+            sudo systemctl restart gunicorn || gunicorn -w 4 server:app -b 0.0.0.0:5001'  # 애플리케이션 실행
