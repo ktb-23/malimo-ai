@@ -26,9 +26,6 @@ jobs:
         env:
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
-          ssh -o StrictHostKeyChecking=no -i <(echo "$EC2_SSH_KEY") ubuntu@${{ secrets.EC2_IP_ADDRESS }} "pkill -f server.py || true"
+          ssh -o StrictHostKeyChecking=no -i <(echo "$EC2_SSH_KEY") ubuntu@${{ secrets.EC2_IP_ADDRESS }} "sudo chmod +x /home/ubuntu/server.py && OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} python /home/ubuntu/server.py"
 
-      - name: Run server on EC2 with virtual environment
-        run: |
-          ssh -i < ${{ secrets.EC2_SSH_KEY }} -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} "sudo chmod +x /home/ubuntu/server.py && OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} python /home/ubuntu/server.py"
-
+      
