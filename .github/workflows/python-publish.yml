@@ -39,7 +39,8 @@ jobs:
             cd malimo &&  # malimo 폴더로 이동
             git pull origin dev &&  # Git 저장소 업데이트
             # 가상환경 생성 및 활성화
-            python3 -m venv venv && source venv/bin/activate &&
+            source venv/bin/activate &&
+            cd malimo &&
             pip install -r requirements.txt &&
             pkill gunicorn || echo "No existing gunicorn process running" &&
             nohup venv/bin/gunicorn -w 4 server:app -b 0.0.0.0:5001 > /dev/null 2>&1 &'
