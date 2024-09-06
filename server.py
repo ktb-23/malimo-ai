@@ -6,6 +6,7 @@ from logging.handlers import RotatingFileHandler
 import json
 import traceback
 import re
+from threading import Lock
 
 # 환경 변수에서 OpenAI API 키 가져오기
 api_key = os.getenv("OPENAI_API_KEY")
@@ -28,6 +29,7 @@ app.logger.setLevel(logging.DEBUG)
 # 사용자별 assistant와 thread 관리를 위한 딕셔너리
 user_assistants = {}
 assistant_threads = {}
+lock = Lock()  # 스레드 안전성을 위한 락
 
 def create_assistant(user_id):
     try:
@@ -62,6 +64,57 @@ def create_assistant(user_id):
     except Exception as e:
         app.logger.error(f"Error creating assistant for user {user_id}: {str(e)}")
         raise
+
+@app.route('/get_or_create_assistant', methods=['POST'])
+def get_or_create_assistant():
+    try:
+        data = request.get_json()
+        if not data or 'user_id' not in data:
+            return jsonify({"error": "No user_id provided"}), 400
+        
+        user_id = data['user_id']
+        
+        with lock:
+            if user_id not in user_assistants:
+                assistant_id, thread_id = create_assistant(user_id)
+                user_assistants[user_id] = assistant_id
+                assistant_threads[assistant_id] = thread_id
+            else:
+                assistant_id = user_assistants[user_id]
+        
+        app.logger.info(f"Assistant ID for user {user_id}: {assistant_id}")
+        return jsonify({"assistant_id": assistant_id}), 200
+    except Exception as e:
+        error_message = f"An error occurred: {str(e)}"
+        app.logger.error(f"Error in get_or_create_assistant: {error_message}\n{traceback.format_exc()}")
+        return jsonify({"error": error_message}), 500
+
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    try:
+        data = request.get_json()
+        if not data or 'assistant_id' not in data or 'message' not in data:
+            return jsonify({"error": "Invalid request data"}), 400
+        
+        assistant_id = data['assistant_id']
+        user_input = data['message']
+        
+        app.logger.info(f"Analyzing message for assistant ID: {assistant_id}")
+        app.logger.debug(f"Current assistant_threads: {assistant_threads}")
+        
+        with lock:
+            if assistant_id not in assistant_threads:
+                app.logger.error(f"Invalid assistant ID: {assistant_id}")
+                return jsonify({"error": "Invalid assistant ID"}), 400
+            
+            thread_id = assistant_threads[assistant_id]
+        
+        analysis_result = analyze_message(assistant_id, thread_id, user_input)
+        return Response(json.dumps(analysis_result, ensure_ascii=False), content_type='application/json; charset=utf-8')
+    except Exception as e:
+        error_message = f"An error occurred: {str(e)}"
+        app.logger.error(f"Error in analyze: {error_message}\n{traceback.format_exc()}")
+        return jsonify({"error": error_message}), 500
 
 def parse_response(response):
     try:
@@ -138,47 +191,3 @@ def analyze_message(assistant_id, thread_id, user_input):
     except Exception as e:
         app.logger.error(f"Error analyzing message: {str(e)}\n{traceback.format_exc()}")
         raise
-
-@app.route('/get_or_create_assistant', methods=['POST'])
-def get_or_create_assistant():
-    try:
-        data = request.get_json()
-        if not data or 'user_id' not in data:
-            return jsonify({"error": "No user_id provided"}), 400
-        
-        user_id = data['user_id']
-        
-        if user_id not in user_assistants:
-            assistant_id, thread_id = create_assistant(user_id)
-            user_assistants[user_id] = assistant_id
-            assistant_threads[assistant_id] = thread_id
-        else:
-            assistant_id = user_assistants[user_id]
-        
-        return jsonify({"assistant_id": assistant_id}), 200
-    except Exception as e:
-        error_message = f"An error occurred: {str(e)}"
-        app.logger.error(f"Error in get_or_create_assistant: {error_message}\n{traceback.format_exc()}")
-        return jsonify({"error": error_message}), 500
-
-@app.route('/analyze', methods=['POST'])
-def analyze():
-    try:
-        data = request.get_json()
-        if not data or 'assistant_id' not in data or 'message' not in data:
-            return jsonify({"error": "Invalid request data"}), 400
-        
-        assistant_id = data['assistant_id']
-        user_input = data['message']
-        
-        if assistant_id not in assistant_threads:
-            return jsonify({"error": "Invalid assistant ID"}), 400
-        
-        thread_id = assistant_threads[assistant_id]
-        
-        analysis_result = analyze_message(assistant_id, thread_id, user_input)
-        return Response(json.dumps(analysis_result, ensure_ascii=False), content_type='application/json; charset=utf-8')
-    except Exception as e:
-        error_message = f"An error occurred: {str(e)}"
-        app.logger.error(f"Error in analyze: {error_message}\n{traceback.format_exc()}")
-        return jsonify({"error": error_message}), 500
