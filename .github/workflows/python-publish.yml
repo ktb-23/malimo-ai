@@ -23,24 +23,13 @@ jobs:
           source venv/bin/activate  # 가상환경 활성화
           python -m pip install --upgrade pip  # pip 업그레이드
           pip install -r requirements.txt  # requirements.txt에 명시된 패키지 설치
-
-      - name: Deploy to EC2
-        env:
-          PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          HOST: ${{ secrets.EC2_IP_ADDRESS }}
-          USER: ubuntu  # EC2_USER를 ubuntu로 기본 설정
-        run: |
-          echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
-          ssh -o StrictHostKeyChecking=no -i private_key ${USER}@${HOST} '
-            cd /home/ubuntu &&
-            if [ ! -d "malimo" ]; then
-              git clone -b dev https://github.com/ktb-23/malimo-ai.git malimo  # Git 저장소를 /home/ubuntu/malimo에 클론
-            fi &&
-            cd malimo &&
-            git pull origin dev &&  # Git 저장소 업데이트
-            # 가상환경 활성화
-            source venv/bin/activate &&
-            pip install -r requirements.txt &&
-            pkill gunicorn || echo "No existing gunicorn process running" &&
-            nohup venv/bin/gunicorn -w 4 server:app -b 0.0.0.0:5001 > /dev/null 2>&1 &'
+          cd /home/ubuntu 
+          if [ ! -d "malimo" ]; then
+          git clone -b dev https://github.com/ktb-23/malimo-ai.git malimo  # Git 저장소를 /home/ubuntu/malimo에 클론
+          fi 
+          cd malimo 
+          git pull origin dev # Git 저장소 업데이트
+          # 가상환경 활성화
+          pkill gunicorn || echo "No existing gunicorn process running" 
+          nohup venv/bin/gunicorn -w 4 server:app -b 0.0.0.0:5001 > /dev/null 2>&1 
 
