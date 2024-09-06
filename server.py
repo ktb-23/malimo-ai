@@ -117,28 +117,48 @@ def analyze_message(thread_id, user_input, assistant_id):
         logger.error(f"Error analyzing message: {str(e)}\n{traceback.format_exc()}")
         raise
 
+import re
+import logging
+
+# logger 설정
+logger = logging.getLogger(__name__)
+
 def parse_response(response):
     try:
         logger.debug(f"Parsing response: {response}")
 
+        # 패턴 정의
         emotion_pattern = r"1\.?\s*감정\s*분석:?([\s\S]*?)(?=2\.|\n\n|$)"
         summary_pattern = r"2\.?\s*요약:?([\s\S]*?)(?=3\.|\n\n|$)"
         advice_pattern = r"3\.?\s*조언:?([\s\S]*)"
 
+        # 정규식 검색
         emotion_match = re.search(emotion_pattern, response, re.IGNORECASE | re.DOTALL)
         summary_match = re.search(summary_pattern, response, re.IGNORECASE | re.DOTALL)
         advice_match = re.search(advice_pattern, response, re.IGNORECASE | re.DOTALL)
 
-        emotion_analysis = emotion_match.group(1).strip() if emotion_match else "감정 분석을 찾을 수 없습니다."
+        # 감정 분석 섹션 처리
+        if emotion_match:
+            emotion_analysis = emotion_match.group(1).strip()
+            # 여러 감정이 나올 수 있으므로 감정별로 분리
+            emotions = re.findall(r'(\w+:\s*\d+/5)', emotion_analysis)
+            emotion_analysis = emotions if emotions else ["감정 분석을 찾을 수 없습니다."]
+        else:
+            emotion_analysis = ["감정 분석을 찾을 수 없습니다."]
+
+        # 요약 및 조언 처리
         summary = summary_match.group(1).strip() if summary_match else "요약을 찾을 수 없습니다."
         advice = advice_match.group(1).strip() if advice_match else "조언을 찾을 수 없습니다."
 
+        # 총점 처리 (감정 중 하나에 있을 것으로 가정)
         total_score_pattern = r"총점:\s*(\d+\.?\d*)/5"
-        total_score_match = re.search(total_score_pattern, emotion_analysis)
+        total_score_match = re.search(total_score_pattern, response)
         total_score = total_score_match.group(1) if total_score_match else "총점을 찾을 수 없습니다."
 
+        # 공백 처리
         summary = ' '.join(summary.split())
 
+        # 결과 딕셔너리
         parsed = {
             "emotion_analysis": emotion_analysis,
             "total_score": total_score,
@@ -150,8 +170,10 @@ def parse_response(response):
     except Exception as e:
         logger.error(f"Error parsing response: {str(e)}\nResponse: {response}")
         return {
-            "emotion_analysis": "파싱 오류",
+            "emotion_analysis": ["파싱 오류"],
             "total_score": "파싱 오류",
             "summary": "파싱 오류",
             "advice": "파싱 오류"
         }
+
+
