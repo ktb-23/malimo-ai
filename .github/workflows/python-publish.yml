@@ -2,8 +2,7 @@ name: Deploy to EC2
 
 on:
   push:
-    branches:
-      - dev
+    branches: [ main ]
 
 jobs:
   deploy:
@@ -13,22 +12,29 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Set up SSH
-        uses: webfactory/ssh-agent@v0.5.3
+      - name: Set up Python
+        uses: actions/setup-python@v2
         with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+          python-version: '3.x'
 
-      - name: Copy files to EC2
+      - name: Install dependencies
         run: |
-          scp -o StrictHostKeyChecking=no -r ./server.py ubuntu@${{ secrets.EC2_IP_ADDRESS }}:/home/ubuntu/
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Stop existing Flask server
-        run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} \
-          "ps aux | grep server.py | grep -v grep | awk '{print \$2}' | xargs -r kill -9 || true"
+      - name: Run tests
+        run: python -m unittest discover tests
 
-      - name: Run server on EC2 with gunicorn
+      - name: Deploy to EC2
+        env:
+          PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          HOST: ${{ secrets.EC2_IP_ADDRESS }}
+          USER: ubuntu  # EC2_USER를 ubuntu로 기본 설정
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} "
-            sudo chmod +x /home/ubuntu/server.py &&
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} nohup gunicorn -w 4 server:app -b 0.0.0.0:5001 > /dev/null 2> /dev/null < /dev/null & disown"
+          echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+          ssh -o StrictHostKeyChecking=no -i private_key ${USER}@${HOST} '
+            cd /path/to/your/app &&
+            git pull origin main &&
+            source venv/bin/activate &&
+            pip install -r requirements.txt &&
+            sudo systemctl restart your-flask-app.service'
