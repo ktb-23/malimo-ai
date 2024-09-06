@@ -112,9 +112,15 @@ def analyze_message(thread_id, user_input, assistant_id):
         
         # 메시지 리스트를 받아서 GPT의 응답을 추출
         messages = client.beta.threads.messages.list(thread_id=thread_id)
+        
+        # messages 구조를 로그로 출력 (디버깅용)
+        logger.debug(f"Messages received: {messages}")
+
+        # 최신 메시지의 내용을 확인
         answer = messages.data[-1].content[0].text.value  # 최신 메시지를 사용
         
-        logger.debug(f"Raw API response: {answer}")
+        # answer 구조를 로그로 출력 (디버깅용)
+        logger.debug(f"Answer extracted: {answer}")
         
         # 응답이 JSON 형식이므로 이를 파싱
         try:
