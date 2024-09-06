@@ -3,7 +3,7 @@ name: Deploy to EC2
 on:
   push:
     branches:
-      - main
+      - dev
 
 jobs:
   deploy:
@@ -20,12 +20,12 @@ jobs:
 
       - name: Copy files to EC2
         run: |
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -r ./server.py ubuntu@${{ secrets.EC2_IP_ADDRESS }}:/home/ubuntu/
+          scp -o StrictHostKeyChecking=no -r ./server.py ubuntu@${{ secrets.EC2_IP_ADDRESS }}:/home/ubuntu/
 
       - name: Stop existing Flask server
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_IP_ADDRESS }} "screen -S llmserver -X quit || pkill -f server.py || true" || true
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} "pkill -f server.py || true"
 
       - name: Run server on EC2 with virtual environment
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ubuntu@${{ secrets.EC2_IP_ADDRESS }} "source /home/ubuntu/myenv/bin/activate && screen -dmS llmserver python /home/ubuntu/server.py"
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_IP_ADDRESS }} "sudo chmod +x /home/ubuntu/server.py && OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} python /home/ubuntu/server.py"
