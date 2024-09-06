@@ -18,14 +18,6 @@ client = OpenAI(api_key=api_key)
 # Flask 앱 초기화
 app = Flask(__name__)
 
-# 로깅 설정
-handler = RotatingFileHandler('server.log', maxBytes=10 * 1024 * 1024, backupCount=3)
-handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-app.logger.addHandler(handler)
-app.logger.setLevel(logging.DEBUG)
-
 # 사용자별 assistant와 thread 관리를 위한 딕셔너리
 user_data = {}
 lock = Lock()  # 스레드 안전성을 위한 락
@@ -91,29 +83,27 @@ def get_or_create_assistant():
 @app.route('/analyze', methods=['POST'])
 def analyze():
     try:
+        # 요청에서 데이터를 받아옴
         data = request.get_json()
-        if not data or 'thread_id' not in data or 'message' not in data:
+        if not data or 'thread_id' not in data or 'message' not in data or 'assistant_id' not in data:
             return jsonify({"error": "Invalid request data"}), 400
         
+        # 데이터에서 필요한 값 추출
         thread_id = data['thread_id']
         user_input = data['message']
+        assistant_id = data['assistant_id']
         
-        app.logger.info(f"Analyzing message for thread ID: {thread_id}")
+        # 로그에 분석 요청 정보 기록
+        app.logger.info(f"Analyzing message for thread ID: {thread_id}, Assistant ID: {assistant_id}")
         
-        assistant_id = None
-        with lock:
-            for user, info in user_data.items():
-                if info['thread_id'] == thread_id:
-                    assistant_id = info['assistant_id']
-                    break
+        # 메시지 분석을 진행하는 함수 호출
+        analysis_result = analyze_message(thread_id, user_input)
         
-        if not assistant_id:
-            app.logger.error(f"Invalid thread ID: {thread_id}")
-            return jsonify({"error": "Invalid thread ID"}), 400
-        
-        analysis_result = analyze_message(assistant_id, thread_id, user_input)
+        # 결과를 JSON 형식으로 반환
         return Response(json.dumps(analysis_result, ensure_ascii=False), content_type='application/json; charset=utf-8')
+    
     except Exception as e:
+        # 에러 발생 시 로그에 기록하고 에러 메시지 반환
         error_message = f"An error occurred: {str(e)}"
         app.logger.error(f"Error in analyze: {error_message}\n{traceback.format_exc()}")
         return jsonify({"error": error_message}), 500
@@ -160,7 +150,7 @@ def parse_response(response):
             "advice": "파싱 오류"
         }
         
-def analyze_message(assistant_id, thread_id, user_input):
+def analyze_message(thread_id, user_input):
     try:
         client.beta.threads.messages.create(
             thread_id=thread_id,
@@ -169,8 +159,7 @@ def analyze_message(assistant_id, thread_id, user_input):
         )
         
         run = client.beta.threads.runs.create(
-            thread_id=thread_id,
-            assistant_id=assistant_id
+            thread_id=thread_id
         )
         
         while run.status != 'completed':
