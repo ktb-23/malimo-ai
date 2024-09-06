@@ -6,18 +6,6 @@ from logging.handlers import RotatingFileHandler
 import json
 import traceback
 import re
-from dotenv import load_dotenv
-
-
-# .env 파일 로드
-load_dotenv()
-
-# 환경 변수에서 OpenAI API 키 가져오기
-api_key = os.getenv("OPENAI_API_KEY")
-if not api_key:
-    raise ValueError("OpenAI API key not found in environment variables")
-
-client = OpenAI(api_key=api_key)
 
 # 환경 변수에서 OpenAI API 키 가져오기
 api_key = os.getenv("OPENAI_API_KEY")
@@ -37,8 +25,9 @@ handler.setFormatter(formatter)
 app.logger.addHandler(handler)
 app.logger.setLevel(logging.DEBUG)
 
-# 사용자별 assistant 관리를 위한 딕셔너리
+# 사용자별 assistant와 thread 관리를 위한 딕셔너리
 user_assistants = {}
+assistant_threads = {}
 
 def create_assistant(user_id):
     try:
@@ -63,13 +52,13 @@ def create_assistant(user_id):
    - 사용자의 감정 상태에 맞는 따뜻한 위로나 조언을 제공해.
    - 100-200단어 정도로 작성해.
 
-반드시 위의 순서와 형식을 지켜서 답변해줘. 
-각 섹션 시작 시 번호와 제목을 명확히 표시해
-위의 내용을 바탕으로 parsing을 진행할건데 이때 텍스트에 강조표현이 들어가면 안된다.""",
+반드시 위의 순서와 형식을 지켜서 답변해줘. 각 섹션 시작 시 번호와 제목을 명확히 표시해.
+위의 내용을 바탕으로 parsing을 진행할건데 이때 텍스트에 강조표현이 들어가면 안된다. 특히 '**'을 이용한 굵게 표현은 절대 금지야.""",
             model="gpt-4o-mini"
         )
-        app.logger.debug(f"Assistant created successfully for user {user_id}")
-        return assistant.id
+        thread = client.beta.threads.create()
+        app.logger.debug(f"Assistant and thread created successfully for user {user_id}")
+        return assistant.id, thread.id
     except Exception as e:
         app.logger.error(f"Error creating assistant for user {user_id}: {str(e)}")
         raise
@@ -77,28 +66,28 @@ def create_assistant(user_id):
 def parse_response(response):
     try:
         app.logger.debug(f"Parsing response: {response}")
-        
-        # 정규 표현식을 사용하여 각 섹션을 찾습니다.
+
+        # 정규 표현식을 더 유연하게 수정
         emotion_pattern = r"1\.?\s*감정\s*분석:?([\s\S]*?)(?=2\.|\n\n|$)"
         summary_pattern = r"2\.?\s*요약:?([\s\S]*?)(?=3\.|\n\n|$)"
         advice_pattern = r"3\.?\s*조언:?([\s\S]*)"
-        
-        emotion_match = re.search(emotion_pattern, response, re.IGNORECASE)
-        summary_match = re.search(summary_pattern, response, re.IGNORECASE)
-        advice_match = re.search(advice_pattern, response, re.IGNORECASE)
-        
+
+        emotion_match = re.search(emotion_pattern, response, re.IGNORECASE | re.DOTALL)
+        summary_match = re.search(summary_pattern, response, re.IGNORECASE | re.DOTALL)
+        advice_match = re.search(advice_pattern, response, re.IGNORECASE | re.DOTALL)
+
         emotion_analysis = emotion_match.group(1).strip() if emotion_match else "감정 분석을 찾을 수 없습니다."
         summary = summary_match.group(1).strip() if summary_match else "요약을 찾을 수 없습니다."
         advice = advice_match.group(1).strip() if advice_match else "조언을 찾을 수 없습니다."
-        
+
         # 총점 추출
         total_score_pattern = r"총점:\s*(\d+\.?\d*)/5"
         total_score_match = re.search(total_score_pattern, emotion_analysis)
         total_score = total_score_match.group(1) if total_score_match else "총점을 찾을 수 없습니다."
-        
+
         # 요약에서 줄바꿈 처리
         summary = ' '.join(summary.split())
-        
+
         parsed = {
             "emotion_analysis": emotion_analysis,
             "total_score": total_score,
@@ -116,30 +105,36 @@ def parse_response(response):
             "advice": "파싱 오류"
         }
 
-def analyze_message(assistant_id, user_input):
+def analyze_message(assistant_id, thread_id, user_input):
     try:
-        thread = client.beta.threads.create()
         client.beta.threads.messages.create(
-            thread_id=thread.id,
+            thread_id=thread_id,
             role="user",
             content=user_input
         )
         
         run = client.beta.threads.runs.create(
-            thread_id=thread.id,
+            thread_id=thread_id,
             assistant_id=assistant_id
         )
         
         while run.status != 'completed':
-            run = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
+            run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
             app.logger.debug(f"Run status: {run.status}")
         
-        messages = client.beta.threads.messages.list(thread_id=thread.id)
+        messages = client.beta.threads.messages.list(thread_id=thread_id)
         answer = messages.data[0].content[0].text.value
         
         app.logger.debug(f"Raw API response: {answer}")
         
-        return parse_response(answer)
+        parsed_response = parse_response(answer)
+        
+        # 파싱 결과 검증
+        if all(value == "파싱 오류" for value in parsed_response.values()):
+            app.logger.error(f"Parsing failed for all fields. Raw response: {answer}")
+            return {"error": "응답 파싱 중 오류가 발생했습니다."}
+        
+        return parsed_response
     except Exception as e:
         app.logger.error(f"Error analyzing message: {str(e)}\n{traceback.format_exc()}")
         raise
@@ -154,8 +149,9 @@ def get_or_create_assistant():
         user_id = data['user_id']
         
         if user_id not in user_assistants:
-            assistant_id = create_assistant(user_id)
+            assistant_id, thread_id = create_assistant(user_id)
             user_assistants[user_id] = assistant_id
+            assistant_threads[assistant_id] = thread_id
         else:
             assistant_id = user_assistants[user_id]
         
@@ -175,7 +171,12 @@ def analyze():
         assistant_id = data['assistant_id']
         user_input = data['message']
         
-        analysis_result = analyze_message(assistant_id, user_input)
+        if assistant_id not in assistant_threads:
+            return jsonify({"error": "Invalid assistant ID"}), 400
+        
+        thread_id = assistant_threads[assistant_id]
+        
+        analysis_result = analyze_message(assistant_id, thread_id, user_input)
         return Response(json.dumps(analysis_result, ensure_ascii=False), content_type='application/json; charset=utf-8')
     except Exception as e:
         error_message = f"An error occurred: {str(e)}"
