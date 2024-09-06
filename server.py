@@ -27,8 +27,7 @@ app.logger.addHandler(handler)
 app.logger.setLevel(logging.DEBUG)
 
 # 사용자별 assistant와 thread 관리를 위한 딕셔너리
-user_assistants = {}
-assistant_threads = {}
+user_data = {}
 lock = Lock()  # 스레드 안전성을 위한 락
 
 def create_assistant(user_id):
@@ -75,15 +74,15 @@ def get_or_create_assistant():
         user_id = data['user_id']
         
         with lock:
-            if user_id not in user_assistants:
+            if user_id not in user_data:
                 assistant_id, thread_id = create_assistant(user_id)
-                user_assistants[user_id] = assistant_id
-                assistant_threads[assistant_id] = thread_id
+                user_data[user_id] = {"assistant_id": assistant_id, "thread_id": thread_id}
             else:
-                assistant_id = user_assistants[user_id]
+                assistant_id = user_data[user_id]["assistant_id"]
+                thread_id = user_data[user_id]["thread_id"]
         
-        app.logger.info(f"Assistant ID for user {user_id}: {assistant_id}")
-        return jsonify({"assistant_id": assistant_id}), 200
+        app.logger.info(f"Assistant ID for user {user_id}: {assistant_id}, Thread ID: {thread_id}")
+        return jsonify({"assistant_id": assistant_id, "thread_id": thread_id}), 200
     except Exception as e:
         error_message = f"An error occurred: {str(e)}"
         app.logger.error(f"Error in get_or_create_assistant: {error_message}\n{traceback.format_exc()}")
@@ -93,21 +92,24 @@ def get_or_create_assistant():
 def analyze():
     try:
         data = request.get_json()
-        if not data or 'assistant_id' not in data or 'message' not in data:
+        if not data or 'thread_id' not in data or 'message' not in data:
             return jsonify({"error": "Invalid request data"}), 400
         
-        assistant_id = data['assistant_id']
+        thread_id = data['thread_id']
         user_input = data['message']
         
-        app.logger.info(f"Analyzing message for assistant ID: {assistant_id}")
-        app.logger.debug(f"Current assistant_threads: {assistant_threads}")
+        app.logger.info(f"Analyzing message for thread ID: {thread_id}")
         
+        assistant_id = None
         with lock:
-            if assistant_id not in assistant_threads:
-                app.logger.error(f"Invalid assistant ID: {assistant_id}")
-                return jsonify({"error": "Invalid assistant ID"}), 400
-            
-            thread_id = assistant_threads[assistant_id]
+            for user, info in user_data.items():
+                if info['thread_id'] == thread_id:
+                    assistant_id = info['assistant_id']
+                    break
+        
+        if not assistant_id:
+            app.logger.error(f"Invalid thread ID: {thread_id}")
+            return jsonify({"error": "Invalid thread ID"}), 400
         
         analysis_result = analyze_message(assistant_id, thread_id, user_input)
         return Response(json.dumps(analysis_result, ensure_ascii=False), content_type='application/json; charset=utf-8')
@@ -157,7 +159,7 @@ def parse_response(response):
             "summary": "파싱 오류",
             "advice": "파싱 오류"
         }
-
+        
 def analyze_message(assistant_id, thread_id, user_input):
     try:
         client.beta.threads.messages.create(
@@ -182,7 +184,6 @@ def analyze_message(assistant_id, thread_id, user_input):
         
         parsed_response = parse_response(answer)
         
-        # 파싱 결과 검증
         if all(value == "파싱 오류" for value in parsed_response.values()):
             app.logger.error(f"Parsing failed for all fields. Raw response: {answer}")
             return {"error": "응답 파싱 중 오류가 발생했습니다."}
@@ -191,3 +192,6 @@ def analyze_message(assistant_id, thread_id, user_input):
     except Exception as e:
         app.logger.error(f"Error analyzing message: {str(e)}\n{traceback.format_exc()}")
         raise
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5001, debug=True)
