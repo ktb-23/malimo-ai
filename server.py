@@ -85,7 +85,7 @@ def analyze():
     try:
         # 요청에서 데이터를 받아옴
         data = request.get_json()
-        if not data or 'thread_id' not in data or 'message' not in data or 'assistant_id' not in data:
+        if not data or 'thread_id' not in data or 'message' not in data :
             return jsonify({"error": "Invalid request data"}), 400
         
         # 데이터에서 필요한 값 추출
