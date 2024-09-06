@@ -33,28 +33,34 @@ def get_or_create_assistant():
         logger.debug(f"Creating assistant for user {user_id}")
         assistant = client.beta.assistants.create(
             name=f"Diary Assistant for {user_id}",
-            instructions="""너는 사용자의 일기를 분석하는 역할이야. 다음 세 가지 정보를 제공해야 해:
+            instructions="""
+너는 사용자의 일기를 분석하는 역할이야. 그리고 이 데이터를 구조화된 JSON 형식으로 제공해야 해. 아래와 같은 형식으로 응답을 생성해야 해:
 
-1. 감정 분석:
-   - 주요 감정들을 구체적으로 나열하고 각각의 비율(%)을 제시해. (예: 피곤함: 40%, 기쁨: 30%, 불안: 20%, 기대: 10%)
-   - 감정은 '부정', '긍정', '중립' 등의 일반적인 카테고리가 아닌, 구체적인 감정 단어를 사용해야 해.
-   - 반드시 4개의 감정을 나열해.
-   - 반드시 오늘 하루의 총점(0-5점, 0.5점 단위)을 제시해. (예: 총점: 3.5/5)
+{
+  "emotion_analysis": [
+    {"emotion": "피곤함", "percentage": 40},
+    {"emotion": "기쁨", "percentage": 30},
+    {"emotion": "불안", "percentage": 20},
+    {"emotion": "기대", "percentage": 10}
+  ],
+  "total_score": 3.5,
+  "summary": [
+    "오늘 일하다가 너무 힘들어 퇴근하기로 결정했어요.",
+    "저녁에 친구와 맛있는 저녁을 먹었어요.",
+    "집에 돌아와서 영화를 보며 휴식을 취했어요."
+  ],
+  "advice": "오늘 하루 정말 고생 많으셨습니다. 힘들었던 일이 많았지만, 내일은 더 나은 하루가 될 거예요. 충분한 휴식을 취하고 긍정적인 마음을 유지하려고 노력해보세요. 새로운 도전은 때때로 불안함을 가져오기도 하지만, 그 과정에서 배울 점이 많습니다. 자신을 믿고 조금 더 여유를 가지면 좋을 것 같아요."
+}
 
-2. 요약:
-   - 사용자의 하루를 객관적으로 요약해줘.
-   - 정확히 3문장으로 작성해.
-   - 각 문장은 반드시 '-했어요' 어미로 끝나야 해. (예: "오늘 일하다가 너무 힘들어 퇴근하기로 결정했어요.")
-   - '-'나 다른 기호 없이 문장만 작성해.
-
-3. 조언:
-   - 사용자의 감정 상태에 맞는 따뜻한 위로나 조언을 제공해.
-   - 100-200단어 정도로 작성해.
-
-반드시 위의 순서와 형식을 지켜서 답변해줘. 각 섹션 시작 시 번호와 제목을 명확히 표시해.
-위의 내용을 바탕으로 parsing을 진행할건데 이때 텍스트에 강조표현이 들어가면 안된다. 특히 '**'을 이용한 굵게 표현은 절대 금지야.""",
+- "emotion_analysis"는 각 감정과 해당 감정의 비율(%)을 나타내는 객체 배열이야.
+- "total_score"는 오늘 하루의 총점을 나타내며, 0에서 5 사이의 숫자 값을 가질 수 있어.
+- "summary"는 3문장으로 사용자의 하루를 요약한 리스트야.
+- "advice"는 사용자에게 따뜻한 위로나 조언을 제공하는 텍스트야.
+- 모든 응답은 JSON 형식으로 반환되어야 해.
+""",
             model="gpt-4o-mini"
         )
+        
         thread = client.beta.threads.create()
         logger.info(f"Assistant created for user {user_id}: assistant_id={assistant.id}, thread_id={thread.id}")
         return jsonify({"assistant_id": assistant.id, "thread_id": thread.id}), 200
@@ -106,11 +112,11 @@ def analyze_message(thread_id, user_input, assistant_id):
         
         logger.debug(f"Raw API response: {answer}")
         
-        parsed_response = parse_response(answer)
+        parsed_response = gpt_response(answer)
         
-        if all(value == "파싱 오류" for value in parsed_response.values()):
+        if all(value == "오류" for value in parsed_response.values()):
             logger.error(f"Parsing failed for all fields. Raw response: {answer}")
-            return {"error": "응답 파싱 중 오류가 발생했습니다."}
+            return {"error": "응답 중 오류가 발생했습니다."}
         
         return parsed_response
     except Exception as e:
@@ -123,40 +129,19 @@ import logging
 # logger 설정
 logger = logging.getLogger(__name__)
 
-def parse_response(response):
+def gpt_response(response):
     try:
         logger.debug(f"Parsing response: {response}")
 
-        # 패턴 정의
-        emotion_pattern = r"1\.?\s*감정\s*분석:?([\s\S]*?)(?=2\.|\n\n|$)"
-        summary_pattern = r"2\.?\s*요약:?([\s\S]*?)(?=3\.|\n\n|$)"
-        advice_pattern = r"3\.?\s*조언:?([\s\S]*)"
+        # JSON 데이터로 처리
+        if not isinstance(response, dict):
+            raise ValueError("Response is not a valid JSON object")
 
-        # 정규식 검색
-        emotion_match = re.search(emotion_pattern, response, re.IGNORECASE | re.DOTALL)
-        summary_match = re.search(summary_pattern, response, re.IGNORECASE | re.DOTALL)
-        advice_match = re.search(advice_pattern, response, re.IGNORECASE | re.DOTALL)
-
-        # 감정 분석 섹션 처리
-        if emotion_match:
-            emotion_analysis = emotion_match.group(1).strip()
-            # 여러 감정이 나올 수 있으므로 감정별로 분리
-            emotions = re.findall(r'(\w+:\s*\d+/5)', emotion_analysis)
-            emotion_analysis = emotions if emotions else ["감정 분석을 찾을 수 없습니다."]
-        else:
-            emotion_analysis = ["감정 분석을 찾을 수 없습니다."]
-
-        # 요약 및 조언 처리
-        summary = summary_match.group(1).strip() if summary_match else "요약을 찾을 수 없습니다."
-        advice = advice_match.group(1).strip() if advice_match else "조언을 찾을 수 없습니다."
-
-        # 총점 처리 (감정 중 하나에 있을 것으로 가정)
-        total_score_pattern = r"총점:\s*(\d+\.?\d*)/5"
-        total_score_match = re.search(total_score_pattern, response)
-        total_score = total_score_match.group(1) if total_score_match else "총점을 찾을 수 없습니다."
-
-        # 공백 처리
-        summary = ' '.join(summary.split())
+        # 각 항목 추출
+        emotion_analysis = response.get("emotion_analysis", "감정 분석을 찾을 수 없습니다.")
+        total_score = response.get("total_score", "총점을 찾을 수 없습니다.")
+        summary = response.get("summary", "요약을 찾을 수 없습니다.")
+        advice = response.get("advice", "조언을 찾을 수 없습니다.")
 
         # 결과 딕셔너리
         parsed = {
@@ -170,10 +155,8 @@ def parse_response(response):
     except Exception as e:
         logger.error(f"Error parsing response: {str(e)}\nResponse: {response}")
         return {
-            "emotion_analysis": ["파싱 오류"],
-            "total_score": "파싱 오류",
-            "summary": "파싱 오류",
-            "advice": "파싱 오류"
+            "emotion_analysis": "오류",
+            "total_score": "오류",
+            "summary": "오류",
+            "advice": "오류"
         }
-
-
