@@ -32,7 +32,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i private_key ${USER}@${HOST} '
             cd /home/ubuntu &&
             if [ ! -d ".git" ]; then
-              git clone https://github.com/your-repo/your-project.git .  # Git 저장소 클론
+              git clone https://github.com/ktb-23/malimo-ai.git .  # Git 저장소 클론
             else
               git pull origin dev  # Git 저장소 업데이트
             fi &&
