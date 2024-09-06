@@ -24,7 +24,7 @@ jobs:
           echo "$EC2_SSH_KEY" > ~/ec2_key.pem
           chmod 600 ~/ec2_key.pem
 
-          ssh -o StrictHostKeyChecking=no -i ~/ec2_key.pem ubuntu@<EC2_IP_ADDRESS> << 'EOF'
+          ssh -o StrictHostKeyChecking=no -i ~/ec2_key.pem ubuntu@3.35.159.74 << 'EOF'
             cd /home/ubuntu/malimo || git clone -b dev https://github.com/ktb-23/malimo-ai.git malimo && cd malimo
 
             # 가상 환경 설정 및 패키지 설치
