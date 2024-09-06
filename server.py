@@ -19,7 +19,7 @@ client = OpenAI(api_key=api_key)
 app = Flask(__name__)
 
 # 로깅 설정
-handler = RotatingFileHandler('server.log', maxBytes=10000, backupCount=1)
+handler = RotatingFileHandler('server.log', maxBytes=10 * 1024 * 1024, backupCount=3)
 handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
