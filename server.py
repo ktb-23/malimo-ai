@@ -91,10 +91,9 @@ def analyze():
         # 데이터에서 필요한 값 추출
         thread_id = data['thread_id']
         user_input = data['message']
-        assistant_id = data['assistant_id']
         
         # 로그에 분석 요청 정보 기록
-        app.logger.info(f"Analyzing message for thread ID: {thread_id}, Assistant ID: {assistant_id}")
+        app.logger.info(f"Analyzing message for thread ID: {thread_id}")
         
         # 메시지 분석을 진행하는 함수 호출
         analysis_result = analyze_message(thread_id, user_input)
