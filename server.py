@@ -89,45 +89,52 @@ def analyze():
         error_message = f"An error occurred: {str(e)}"
         logger.error(f"Error in analyze: {error_message}\n{traceback.format_exc()}")
         return jsonify({"error": error_message}), 500
-
+    
 def analyze_message(thread_id, user_input, assistant_id):
     try:
+        # 사용자의 메시지를 thread에 추가
         client.beta.threads.messages.create(
             thread_id=thread_id,
             role="user",
             content=user_input
         )
         
+        # 새로운 run 생성
         run = client.beta.threads.runs.create(
             thread_id=thread_id,
             assistant_id=assistant_id
         )
         
+        # run이 완료될 때까지 대기
         while run.status != 'completed':
             run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
             logger.debug(f"Run status: {run.status}")
         
+        # 메시지 리스트를 받아서 GPT의 응답을 추출
         messages = client.beta.threads.messages.list(thread_id=thread_id)
-        answer = messages
+        answer = messages.data[-1].content[0].text.value  # 최신 메시지를 사용
         
         logger.debug(f"Raw API response: {answer}")
         
-        parsed_response = gpt_response(answer)
+        # 응답이 JSON 형식이므로 이를 파싱
+        try:
+            parsed_response = json.loads(answer)
+        except json.JSONDecodeError:
+            logger.error(f"API 응답이 JSON 형식이 아님: {answer}")
+            return {"error": "API 응답이 JSON 형식이 아닙니다."}
         
-        if all(value == "오류" for value in parsed_response.values()):
-            logger.error(f"Parsing failed for all fields. Raw response: {answer}")
-            return {"error": "응답 중 오류가 발생했습니다."}
-        
-        return parsed_response
+        # 각 항목이 제대로 존재하는지 확인
+        required_keys = ["emotion_analysis", "total_score", "summary", "advice"]
+        if all(key in parsed_response for key in required_keys):
+            logger.debug(f"Parsed response: {parsed_response}")
+            return parsed_response
+        else:
+            logger.error(f"응답에 필수 항목 누락: {parsed_response}")
+            return {"error": "응답에 필수 항목이 누락되었습니다."}
+
     except Exception as e:
         logger.error(f"Error analyzing message: {str(e)}\n{traceback.format_exc()}")
         raise
-
-import re
-import logging
-
-# logger 설정
-logger = logging.getLogger(__name__)
 
 def gpt_response(response):
     try:
