@@ -154,5 +154,3 @@ def review():
         app.logger.error(f"Error in review endpoint: {error_message}\n{traceback.format_exc()}")
         return jsonify({"error": error_message}), 500
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001, debug=False)
