@@ -108,7 +108,7 @@ def analyze_message(thread_id, user_input, assistant_id):
             logger.debug(f"Run status: {run.status}")
         
         messages = client.beta.threads.messages.list(thread_id=thread_id)
-        answer = messages.data[0].content[0].text.value
+        answer = messages
         
         logger.debug(f"Raw API response: {answer}")
         
@@ -144,14 +144,14 @@ def gpt_response(response):
         advice = response.get("advice", "조언을 찾을 수 없습니다.")
 
         # 결과 딕셔너리
-        parsed = {
+        result = {
             "emotion_analysis": emotion_analysis,
             "total_score": total_score,
             "summary": summary,
             "advice": advice
         }
-        logger.debug(f"Parsed response: {parsed}")
-        return parsed
+        logger.debug(f"Parsed response: {result}")
+        return result
     except Exception as e:
         logger.error(f"Error parsing response: {str(e)}\nResponse: {response}")
         return {
